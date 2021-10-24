@@ -1,0 +1,86 @@
+version: '3.7'
+
+networks:
+  zabbix-net:
+
+services:
+  mysql:
+    container_name: mysql
+    image: mysql:5.7
+    networks:
+      - zabbix-net
+    ports:
+       - 3306:3306
+    volumes:
+      - '~/globo/pdi/volumes/mysql:/var/lib/data'
+    environment:
+      - MYSQL_ROOT_PASSWORD=passwd
+      - MYSQL_DATABASE=zabbix
+      - MYSQL_USER=zabbix
+      - MYSQL_PASSWORD=zabbix
+
+  zabbix-server:
+    container_name: zabbix-server
+    image: zabbix/zabbix-server-mysql:ubuntu-latest
+    networks:
+      - zabbix-net
+    links:
+      - mysql
+    restart: always
+    ports:
+       - 10051:10051
+    volumes:
+      - '~/globo/pdi/volumes/zabbix/alertscripts:/usr/lib/zabbix/alertscripts'
+      - '~/globo/pdi/volumes/zabbix/externalscripts:/usr/lib/zabbix/externalscripts'
+    environment:
+      - DB_SERVER_HOST=mysql
+      - MYSQL_DATABASE=zabbix
+      - MYSQL_USER=zabbix
+      - MYSQL_PASSWORD=zabbix
+    depends_on:
+      - mysql
+
+  zabbix-web-nginx-mysql:
+    container_name: zabbix-web-nginx-mysql
+    image: zabbix/zabbix-web-nginx-mysql:ubuntu-latest
+    networks:
+      - zabbix-net
+    links:
+      - mysql
+      - zabbix-server
+    restart: always
+    ports:
+       - 80:8080
+    environment:
+      - DB_SERVER_HOST=mysql
+      - MYSQL_DATABASE=zabbix
+      - MYSQL_USER=zabbix
+      - MYSQL_PASSWORD=zabbix
+      - ZBX_SERVER_HOST=zabbix-server
+    depends_on:
+      - mysql
+      - zabbix-server
+
+  zabbix-agent:
+    container_name: zabbix-agent
+    image: zabbix/zabbix-agent:ubuntu-latest
+    user: root
+    networks:
+      - zabbix-net
+    links:
+      - zabbix-server
+    restart: always
+    ports:
+      - 10050:10050
+    privileged: true
+    volumes:
+      - '~/globo/pdi/volumes/zabbix/zabbix_agentd.d:/etc/zabbix/zabbix_agentd.d'
+    environment:
+      - ZBX_HOSTNAME=Zabbix Server
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=10051
+      - ZBX_ACTIVESERVERS=Zabbix Server
+    depends_on:
+      - mysql
+      - zabbix-server
+      - zabbix-web-nginx-mysql
